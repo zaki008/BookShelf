@@ -1,9 +1,9 @@
 import Response from "@/lib/api.response";
 import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import validateAuthHeader from "@/utils/validateAuthHeader";
-import fs from "fs";
+import { bookCategory, bookStatus } from "@prisma/client";
 import { NextRequest } from "next/server";
-import path from "path";
 
 export const GET = async (
   req: NextRequest,
@@ -97,71 +97,87 @@ export const DELETE = async (
 };
 
 export const PUT = async (
-  req: Request,
+  req: NextRequest,
   { params }: { params: { id: string | number } }
 ) => {
   try {
-    const payload = await req.json();
     const { id } = params;
 
+    // Ambil data FormData dari request
+    const formData = await req.formData();
+
+    // Ambil data dari FormData
+    const isbn = formData.get("isbn") as string;
+    const title = formData.get("title") as string;
+    const author = formData.get("author") as string;
+    const category = formData.get("category") as bookCategory;
+    const status = formData.get("status") as bookStatus;
+    const coverFile = formData.get("cover") as any;
+    const originialcoverFile = formData.get("cover") as any;
+
+    console.log("cover file", coverFile);
+
+    if (!coverFile) {
+      return Response({
+        message: "Cover image is required",
+        status: 400,
+      });
+    }
+
+    // Validate authorization header
     const authValidationResult = validateAuthHeader(req);
     if (authValidationResult.status) {
-      return Response(authValidationResult);
+      return Response({
+        message: authValidationResult.message,
+        data: null,
+        status: 401,
+      });
     }
 
     const { data } = authValidationResult;
 
-    const countBook = await prisma.book.count({
-      where: {
-        username: data?.username,
-        id: Number(id),
-      },
-    });
-    if (countBook !== 1) {
-      return Response({
-        message: "Book Is Not found",
-        data: null,
-        status: 404,
-      });
-    }
+    let coverUrl = null;
+    if (!coverFile.startsWith("https://")) {
+      // Baca file cover ke dalam buffer
+      const buffer = await coverFile.arrayBuffer();
 
-    if (
-      payload.cover.startsWith("data:image/jpeg;base64,") ||
-      payload.cover.startsWith("data:image/png;base64,")
-    ) {
-      const buffer = Buffer.from(payload.cover.split(",")[1], "base64");
-
-      // Generate random filename untuk cover image
       const randomNumber = Math.floor(Math.random() * 1000000);
-      const fileExtension = payload.cover.startsWith("data:image/jpeg")
-        ? ".jpg"
-        : ".png";
+      const fileExtension = coverFile.name.endsWith(".jpg") ? ".jpg" : ".png";
       const filename = `cover_${randomNumber}${fileExtension}`;
 
-      // Tentukan path untuk menyimpan file
-      const directoryPath = path.join(process.cwd(), "public/assets");
-      if (!fs.existsSync(directoryPath)) {
-        fs.mkdirSync(directoryPath, { recursive: true });
+      // Upload ke Supabase Storage
+      const { data: uploadedFile, error } = await supabase.storage
+        .from("bookshef-bucket")
+        .upload(filename, Buffer.from(buffer), {
+          contentType: coverFile.type || "image/jpeg",
+          upsert: true,
+        });
+
+      if (error) {
+        return Response({
+          message: "Error uploading cover image",
+          data: error.message,
+          status: 400,
+        });
       }
 
-      const filePath = path.join(directoryPath, filename);
-
-      // Simpan file ke server
-      fs.writeFileSync(filePath, buffer);
-      payload.cover = `/assets/${filename}`;
+      coverUrl = uploadedFile?.path
+        ? `${process.env.SUPABASE_URL}/storage/v1/object/public/bookshef-bucket/${uploadedFile.path}`
+        : "";
     }
 
-    const bookUpdate = await prisma.book.update({
+    const book = await prisma.book.update({
       where: {
         id: Number(id),
       },
       data: {
-        title: payload.title,
-        author: payload.author,
-        isbn: payload.isbn,
-        cover: payload.cover,
-        category: payload.category,
-        status: payload.status,
+        isbn,
+        title,
+        author,
+        category,
+        status,
+        cover: coverUrl ? coverUrl : originialcoverFile,
+        username: data?.username,
       },
       select: {
         id: true,
@@ -171,22 +187,18 @@ export const PUT = async (
         cover: true,
         category: true,
         status: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
 
     return Response({
       message: "Book Update is successfully",
-      data: bookUpdate,
+      data: book,
       status: 200,
     });
   } catch (err) {
-    if (err instanceof Error && err.message.includes("books_isbn_key")) {
-      return Response({
-        message: "Isbn already exists",
-        data: null,
-        status: 400,
-      });
-    }
+    console.log("error", err);
     return Response({
       message: "Book Update is failed",
       data: err,

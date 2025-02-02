@@ -217,27 +217,25 @@ export const putBook = createAsyncThunk(
   async (data: any, thunkAPI) => {
     try {
       const formData = new FormData();
-      formData.append("title", data?.values?.title);
-      formData.append("author", data?.values.author);
-      formData.append("isbn", data?.values.isbn);
-      formData.append("category", data?.values.category);
-      formData.append("status", data?.values.status);
-      if (data?.values.cover) {
-        formData.append("cover", data?.values.cover);
+      formData.append("title", data?.newValues?.title);
+      formData.append("author", data?.newValues.author);
+      formData.append("isbn", data?.newValues.isbn);
+      formData.append("category", data?.newValues.category);
+      formData.append("status", data?.newValues.status);
+      if (data?.newValues.cover) {
+        formData.append("cover", data?.newValues.cover);
       }
+      console.log("form data", formData);
       const token: string = Cookies.get("tokenLogin") || "";
-      const res = await axios.put(
-        `${API_HOST}books/${data.id}`,
-        data.formData,
-        {
-          headers: {
-            Authorization: token,
-          },
-        }
-      );
+      const res = await axios.put(`${API_HOST}books/${data.id}`, formData, {
+        headers: {
+          Authorization: token,
+        },
+      });
       alertMessage(res.data.message, "success");
       return res;
     } catch (err) {
+      console.log("error", err);
       if (err instanceof AxiosError) {
         const errorMessage = err.response?.data || "Something went wrong";
         alertMessage(err.response?.data.message, "error");
