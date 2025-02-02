@@ -1,0 +1,62 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum bookCategory{
+  technology
+  fantasy
+  mystery
+  romance
+  horror
+  adventure
+  philosophy
+}
+
+enum bookStatus{
+  completed
+  read
+  unread
+}
+
+
+model User{
+  id String @id @default(cuid())
+  name String @db.VarChar(100)
+  username String @db.VarChar(100) @unique
+  email String @db.VarChar(100) @unique
+  password String @db.VarChar(100)
+  token String? @unique @db.VarChar(255)
+  books Book[]
+  createdAt DateTime @default(now()) @map("created_at") 
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Book{
+  id Int @id @default(autoincrement())
+  title String @db.VarChar(150)
+  author String @db.VarChar(100)
+  isbn String @db.VarChar(100) @unique
+  cover String @db.VarChar(100)
+  category bookCategory
+  status bookStatus
+  username String
+  user User @relation(fields: [username], references: [username])
+  createdAt DateTime @default(now()) @map("created_at") 
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("books")
+}
