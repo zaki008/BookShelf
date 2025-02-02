@@ -137,7 +137,7 @@ export const PUT = async (
     const { data } = authValidationResult;
 
     let coverUrl = null;
-    if (!coverFile.startsWith("https://")) {
+    if (coverFile?.type) {
       // Baca file cover ke dalam buffer
       const buffer = await coverFile.arrayBuffer();
 
